@@ -1,8 +1,6 @@
 package predicate
 
 import scala.language.experimental.macros
-import scala.reflect.macros.blackbox.Context
-import scala.reflect.runtime.universe._
 
 /** Implementation of symbolic logic meta-operators */
 class PredicateMacroOps[T](val f: T => Boolean) extends AnyVal {

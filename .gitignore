@@ -10,3 +10,4 @@ run/
 /conf
 *.iml
 project/build.properties
+predicate/
