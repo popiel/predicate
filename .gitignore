@@ -1,0 +1,12 @@
+.idea
+target
+libexec
+logs
+log/
+run/
+*.swp
+*.borked*
+*~
+/conf
+*.iml
+project/build.properties
