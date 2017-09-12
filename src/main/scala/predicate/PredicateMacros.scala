@@ -49,55 +49,6 @@ class PredicateImpl(val c: scala.reflect.macros.blackbox.Context) {
     }
   }
 
-  def replace[T <: Universe.TreeApi](tree: T)(pf: PartialFunction[T, T]): T = {
-    val deep = tree match {
-      case ReferenceToBoxed(ident) => ReferenceToBoxed(replace(ident, pf))
-      case Alternative(trees) => Alternative(trees.map(x => replace(x, pf)))
-      case Annotated(a, b) => Annotated(replace(a, pf), replace(b, pf))
-      case AppliedTypeTree(a, l) => AppliedTypeTree(replace(a, pf), l.map(x => replace(x, pf)))
-      case Apply(a) => Apply(replace(a, pf), l.map(x => replace(x, pf)))
-      case Assign(a, b) => Assign(replace(a, pf), replace(b, pf))
-      case AssignOrNamedArg(a, b) => AssignOrNamedArg(replace(a, pf), replace(b, pf))
-      case Bind(n, a) => Bind(n, replace(a, pf))
-      case Block(l, a) => Block(l.map(x => replace(x, pf)), replace(a, pf))
-      case CaseDef(a, b, c) => CaseDef(replace(a, pf), replace(b, pf), replace(c, pf))
-      case ClassDef(m, n, p, a) => ClassDef(replace(m, pf), replace(n, pf), p.map(x => replace(x, pf)), replace(a, pf))
-      case CompoundTypeTree(a) => CompoundTypeTree(replace(a, pf))
-      case DefDef(m, n, tp, vp, a, b) => ClassDef(replace(m, pf), replace(n, pf), tp.map(x => replace(x, pf)), vp.map(_.map(x => replace(x, pf))), replace(a, pf), replace(b, pf))
-      case ExistentialTypeTree(a, l) => ExistentialTypeTree(replace(a, pf), l.map(x => replace(x, pf)))
-      case Function(l, a) => Function(l.map(x => replace(x, pf)), replace(a, pf))
-      // case Ident(a) => Ident(replace(a, pf))
-      case If(a, b, c) => If(replace(a, pf), replace(b, pf), replace(c, pf))
-      case Import(a, l) => Import(replace(a, pf), l.map(x => replace(x, pf)))
-      case LabelDef(n, p, a) => LabelDef(n, p.map(x => replace(x, pf)), replace(a, pf))
-      // case Literal(a) => Literal(replace(a, pf))
-      case Match(a, l) => Match(replace(a, pf), l.map(x => replace(x, pf)))
-      case ModuleDef(m, n, a) => ModuleDef(m, n, replace(a, pf))
-      case New(a) => New(replace(a, pf))
-      case PackageDef(a, l) => PackageDef(replace(a, pf), l.map(x => replace(x, pf)))
-      case RefTree(a, n) => RefTree(replace(a, pf), n)
-      case Return(a) => Return(replace(a, pf))
-      case Select(a, n) => Select(replace(a, pf), n)
-      case SelectFromTypeTree(a, n) => SelectFromTypeTree(replace(a, pf), n)
-      case SingletonTypeTree(a) => SingletonTypeTree(replace(a, pf))
-      case Star(a) => Star(replace(a, pf))
-      case Super(a, n) => Super(replace(a, pf), n)
-      case Template(p, a, b) => Template(p.map(x => replace(x, pf)), replace(a, pf), b.map(x => replace(x, pf)))
-      // case This(a) => This(replace(a, pf))
-      case Throw(a) => Throw(replace(a, pf))
-      case Try(a, l, f) => Try(replace(a, pf), l.map(x => replace(x, pf)), replace(f, pf))
-      case TypeApply(a, l) => TypeApply(replace(a, pf), l.map(x => replace(x, pf)))
-      case TypeBoundsTree(a, b) => TypeBoundsTree(replace(a, pf), replace(b, pf))
-      case TypeDef(m, n, l, a) => TypeDef(m, n, l.map(x => replace(x, pf)), replace(a, pf))
-      // case TypeTree(a) => TypeTree(replace(a, pf))
-      case Typed(a, b) => Typed(replace(a, pf), replace(b, pf))
-      case UnApply(a, l) => UnApply(replace(a, pf), l.map(x => replace(x, pf)))
-      case ValDef(m, n, a, b) => ValDef(m, n, replace(a, pf), replace(b, pf))
-      case _ => tree
-    }.asInstanceOf[T]
-    pf.applyOrElse(deep, deep).asInstanceOf[T]
-  }
-
   def unary_not_impl[T: WeakTypeTag] = {
     c.prefix.tree match {
       case PredicateApply(NestedLambda(a, f)) => q"{ $a => ! ($f) }"
@@ -107,28 +58,43 @@ class PredicateImpl(val c: scala.reflect.macros.blackbox.Context) {
       }
     }
   }
+
+  def identTransformer(from: TermName, to: Ident) = 
+    new Transformer {
+      override def transform(tree: Tree): Tree = {
+        tree match {
+          case Ident(`from`) => to
+          case _ => super.transform(tree)
+        }
+      }
+    }
   
   def double_and_impl[T : WeakTypeTag, T2](g: c.Expr[T2 => Boolean]) = {
     println(s"Trying to make &&: ${c.prefix} && $g")
-    val full = (c.prefix.tree, g) match {
-      case (PredicateApply(NestedLambda(fa, fb)), NestedLambda(ga, gb)) if (fa equalsStructure ga) =>
-        println("Woot! Same name arg!")
-        q"{ $fa => $fb && $gb }"
-      case _ =>
-        val arg = c.freshName("predicateArg")
-        val left = c.prefix.tree match {
-          case PredicateApply(NestedLambda(fa, fb)) => q"{ val ${fa.name} = $arg; $fb }"
-          case PredicateApply(f)                    => q"{ $f($arg) }"
-          case _                                    => q"{ ${c.prefix}.f($arg) }"
-        }
-        println(s"got left: $left")
-        val right = g match {
-          case NestedLambda(ga, gb) => q"{ val ${ga.name} = $arg; $gb }"
-          case _                    => q"{ $g($arg) }"
-        }
-        println(s"got right: $right")
-        q"{ (${ValDef(Modifiers(Flag.PARAM, TermName(""), Nil), arg, TypeTree(weakTypeOf[T]), EmptyTree)}) => ($left && $right) }"
+    val t = new Traverser() {
+      var nest = 0
+      override def traverse(tree: Tree) {
+        println((" " * nest) + tree.getClass.getName + ": " + tree.hashCode() + ": " + tree)
+        nest += 2
+        super.traverse(tree)
+        nest -= 2
+      }
     }
+    t.traverse(c.prefix.tree)
+    t.traverse(g.tree)
+    val name   = TermName(c.freshName("predicateArg"))
+    val valdef = ValDef(Modifiers(Flag.PARAM, TermName(""), Nil), name, TypeTree(weakTypeOf[T]), EmptyTree)
+    val ident  = Ident(name)
+    val left = c.prefix.tree match {
+      case PredicateApply(NestedLambda(fa, fb)) => identTransformer(fa.name, ident).transform(fb)
+      case PredicateApply(f) => q"{ $f($ident) }"
+      case _ => q"{ ${c.prefix}.f($ident) }"
+    }
+    val right = g match {
+      case NestedLambda(ga, gb) => identTransformer(ga.name, ident).transform(gb)
+      case _ => q"{ $g($ident) }"
+    }
+    val full = q"{ ($valdef) => ($left && $right) }"
     println(s"made full: $full")
     full
   }
