@@ -1,7 +1,7 @@
 package predicate
 
 object Simple {
-  import predicate.PredicateOps._
+  import predicate.PredicateMacroOps._
 
   @inline final def isEven(x: String): Boolean = x.length % 2 == 0
   @inline final def isSquare(x: String): Boolean = {
