@@ -59,7 +59,7 @@ class PredicateImpl(val c: scala.reflect.macros.blackbox.Context) {
     }
   }
 
-  def identTransformer(from: TermName, to: Ident) = 
+  def identTransformer(from: TermName, to: Tree) = 
     new Transformer {
       override def transform(tree: Tree): Tree = {
         tree match {
@@ -82,9 +82,10 @@ class PredicateImpl(val c: scala.reflect.macros.blackbox.Context) {
     }
     t.traverse(c.prefix.tree)
     t.traverse(g.tree)
-    val name   = TermName(c.freshName("predicateArg"))
-    val valdef = ValDef(Modifiers(Flag.PARAM, TermName(""), Nil), name, TypeTree(weakTypeOf[T]), EmptyTree)
-    val ident  = Ident(name)
+    val name   = c.freshName("predicateArg")
+    val NestedLambda(valdef, ident) = c.parse(s"{ ($name:${show(weakTypeOf[T])}) => $name }")
+//    val valdef = ValDef(Modifiers(Flag.PARAM, TermName(""), Nil), name, TypeTree(weakTypeOf[T]), EmptyTree)
+//    val ident  = Ident(name)
     val left = c.prefix.tree match {
       case PredicateApply(NestedLambda(fa, fb)) => identTransformer(fa.name, ident).transform(fb)
       case PredicateApply(f) => q"{ $f($ident) }"
